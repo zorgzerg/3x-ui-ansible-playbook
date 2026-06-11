@@ -1,0 +1,33 @@
+services:
+  3xui:
+    image: {{ xui_image }}
+    container_name: xui
+    restart: unless-stopped
+    volumes:
+      - /opt/3x-ui/db:/etc/x-ui
+      - /opt/3x-ui/logs:/var/log/xray
+{% if xui_mode == 'basic' or not xui_use_letsencrypt %}
+      - /opt/3x-ui/cert:/root/cert
+{% else %}
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+{% endif %}
+    environment:
+      XUI_ENABLE_FAIL2BAN: "{{ xui_enable_fail2ban | ternary('true', 'false') }}"
+    tty: true
+{% if xui_mode == 'basic' %}
+    network_mode: host
+{% elif xui_mode == 'nginx_simple' %}
+    ports:
+      - "127.0.0.1:{{ xui_panel_port }}:{{ xui_panel_port }}"
+      - "0.0.0.0:{{ xui_xray_backend_port }}:443"
+{% if xui_hysteria_enabled | bool %}
+      - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
+{% endif %}
+{% elif xui_mode == 'nginx_sni' %}
+    ports:
+      - "127.0.0.1:{{ xui_panel_port }}:{{ xui_panel_port }}"
+      - "127.0.0.1:{{ xui_xray_backend_port }}:443"
+{% if xui_hysteria_enabled | bool %}
+      - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
+{% endif %}
+{% endif %}

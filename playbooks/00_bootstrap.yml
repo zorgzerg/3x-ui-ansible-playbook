@@ -1,0 +1,110 @@
+---
+# ── Play 00: First-run bootstrap (optional) ───────────────────────────────────
+# If the connection user is root, create xui_admin_user, grant sudo and
+# optionally copy root authorized_keys.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "00 | Bootstrap admin user from root (optional)"
+  hosts: all
+  become: true
+  gather_facts: false
+  tags: [bootstrap]
+
+  tasks:
+    - name: Check if running via root connection
+      ansible.builtin.set_fact:
+        xui_bootstrap_from_root: "{{ (ansible_user | default(ansible_ssh_user | default(''))) == 'root' }}"
+
+    - name: Check whether admin user already exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ xui_admin_user }}"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_from_root | bool
+
+    - name: Cache admin user existence flag
+      ansible.builtin.set_fact:
+        xui_bootstrap_admin_exists: "{{ xui_admin_user in (ansible_facts.getent_passwd | default({})) }}"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_from_root | bool
+
+    - name: Ensure admin user exists
+      ansible.builtin.user:
+        name: "{{ xui_admin_user }}"
+        shell: /bin/bash
+        create_home: true
+        groups: sudo
+        append: true
+        state: present
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_from_root | bool
+        - not (xui_bootstrap_admin_exists | default(false))
+
+    - name: Ensure sudoers.d directory exists
+      ansible.builtin.file:
+        path: /etc/sudoers.d
+        state: directory
+        mode: "0755"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_from_root | bool
+
+    - name: Grant passwordless sudo to admin user
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/90-{{ xui_admin_user }}"
+        mode: "0440"
+        content: "{{ xui_admin_user }} ALL=(ALL:ALL) NOPASSWD:ALL\n"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_sudo_nopasswd | bool
+        - xui_bootstrap_from_root | bool
+
+    - name: Read root authorized_keys
+      ansible.builtin.slurp:
+        src: /root/.ssh/authorized_keys
+      register: root_authorized_keys
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_copy_root_authorized_keys | bool
+        - xui_bootstrap_from_root | bool
+        - not (xui_bootstrap_admin_exists | default(false))
+
+    - name: Ensure admin .ssh directory exists
+      ansible.builtin.file:
+        path: "/home/{{ xui_admin_user }}/.ssh"
+        state: directory
+        owner: "{{ xui_admin_user }}"
+        group: "{{ xui_admin_user }}"
+        mode: "0700"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_copy_root_authorized_keys | bool
+        - xui_bootstrap_from_root | bool
+        - not (xui_bootstrap_admin_exists | default(false))
+        - root_authorized_keys is defined
+        - (root_authorized_keys.content | default('') | length) > 0
+
+    - name: Install admin authorized_keys from root
+      ansible.builtin.copy:
+        dest: "/home/{{ xui_admin_user }}/.ssh/authorized_keys"
+        content: "{{ root_authorized_keys.content | b64decode }}"
+        owner: "{{ xui_admin_user }}"
+        group: "{{ xui_admin_user }}"
+        mode: "0600"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_copy_root_authorized_keys | bool
+        - xui_bootstrap_from_root | bool
+        - not (xui_bootstrap_admin_exists | default(false))
+        - root_authorized_keys is defined
+        - (root_authorized_keys.content | default('') | length) > 0
+
+    - name: Switch connection user for subsequent imported playbooks
+      ansible.builtin.set_fact:
+        xui_run_user: "{{ xui_admin_user }}"
+      when:
+        - xui_bootstrap_admin_user | bool
+        - xui_bootstrap_from_root | bool

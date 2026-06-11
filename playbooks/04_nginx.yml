@@ -1,0 +1,250 @@
+---
+# ── Play 04: Nginx + TLS ──────────────────────────────────────────────────────
+# Installs Nginx (with stream module), issues / generates a TLS certificate and
+# deploys site configs. Skipped entirely in basic mode.
+#
+# Certificate strategies:
+#   xui_use_letsencrypt: true  → certbot --standalone (nginx stopped temporarily)
+#   xui_use_letsencrypt: false → self-signed via openssl (idempotent, creates once)
+#
+# Nginx modes:
+#   nginx_simple → panel behind Nginx on 443; Xray exposed on xui_xray_backend_port
+#   nginx_sni    → nginx-stream SNI router on 443 (panel + Xray + cover backend)
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "04 | Nginx + TLS: Install, configure and issue certificates"
+  hosts: all
+  remote_user: "{{ xui_run_user | default(omit) }}"
+  become: true
+  gather_facts: true
+  tags: [nginx, cert]
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+    - name: Restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+
+  tasks:
+    # ── Install ───────────────────────────────────────────────────────────────
+    - name: Install nginx and stream module
+      ansible.builtin.apt:
+        name: [nginx, libnginx-mod-stream]
+        state: present
+      when: xui_mode != 'basic'
+      tags: [nginx]
+
+    - name: Ensure nginx config directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /etc/nginx/sites-available
+        - /etc/nginx/sites-enabled
+        - /etc/nginx/stream.d
+      when: xui_mode != 'basic'
+      tags: [nginx]
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      when: xui_mode != 'basic'
+      notify: Reload nginx
+      tags: [nginx]
+
+    - name: Manage stream.d include in nginx.conf
+      ansible.builtin.blockinfile:
+        path: /etc/nginx/nginx.conf
+        block: "include /etc/nginx/stream.d/*.conf;"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK stream.d"
+        state: "{{ 'present' if xui_mode == 'nginx_sni' else 'absent' }}"
+        insertafter: EOF
+      when: xui_mode in ['nginx_simple', 'nginx_sni']
+      notify: Restart nginx
+      tags: [nginx]
+
+    # ── TLS: Let's Encrypt ────────────────────────────────────────────────────
+    - name: Install certbot
+      ansible.builtin.apt:
+        name: [certbot]
+        state: present
+      when: xui_mode != 'basic' and xui_use_letsencrypt
+      tags: [cert]
+
+    - name: Ensure ACME webroot exists
+      ansible.builtin.file:
+        path: "{{ xui_acme_webroot }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+      tags: [cert]
+
+    - name: Deploy temporary ACME HTTP config
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/acme-bootstrap.conf
+        mode: "0644"
+        content: |
+          server {
+              listen 80 default_server;
+              server_name _;
+
+              location ^~ /.well-known/acme-challenge/ {
+                  root {{ xui_acme_webroot }};
+                  default_type "text/plain";
+                  try_files $uri =404;
+              }
+
+              location / {
+                  return 404;
+              }
+          }
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+      notify: Reload nginx
+      tags: [cert]
+
+    - name: Enable temporary ACME HTTP config
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/acme-bootstrap.conf
+        dest: /etc/nginx/sites-enabled/acme-bootstrap.conf
+        state: link
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+      notify: Reload nginx
+      tags: [cert]
+
+    - name: Ensure nginx is running for webroot challenge
+      ansible.builtin.service:
+        name: nginx
+        state: started
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+      tags: [cert]
+
+    - name: Apply temporary ACME config before certbot
+      ansible.builtin.meta: flush_handlers
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+      tags: [cert]
+
+    - name: Check if panel Let's Encrypt certificate already exists
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ xui_panel_domain }}/fullchain.pem"
+      register: le_panel_cert_stat
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - xui_panel_domain | length > 0
+      tags: [cert]
+
+    - name: Check if Hysteria Let's Encrypt certificate already exists
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ xui_hysteria_domain }}/fullchain.pem"
+      register: le_hysteria_cert_stat
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - xui_hysteria_enabled | bool
+        - xui_hysteria_domain | length > 0
+      tags: [cert]
+
+    - name: Issue panel Let's Encrypt certificate (webroot)
+      ansible.builtin.command:
+        cmd: >-
+          certbot certonly --webroot -w {{ xui_acme_webroot }}
+          --non-interactive --agree-tos --email {{ xui_certbot_email }}
+          -d {{ xui_panel_domain }}
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - xui_panel_domain | length > 0
+        - not (le_panel_cert_stat.stat.exists | default(false))
+      tags: [cert]
+
+    - name: Issue Hysteria Let's Encrypt certificate (webroot)
+      ansible.builtin.command:
+        cmd: >-
+          certbot certonly --webroot -w {{ xui_acme_webroot }}
+          --non-interactive --agree-tos --email {{ xui_certbot_email }}
+          -d {{ xui_hysteria_domain }}
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - xui_hysteria_enabled | bool
+        - xui_hysteria_domain | length > 0
+        - not (le_hysteria_cert_stat.stat.exists | default(false))
+      tags: [cert]
+
+    - name: Disable temporary ACME HTTP config
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/acme-bootstrap.conf
+        state: absent
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+      notify: Reload nginx
+      tags: [cert]
+
+    # ── TLS: self-signed ──────────────────────────────────────────────────────
+    - name: Generate self-signed certificate
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -nodes -days 3650 -newkey rsa:2048
+          -keyout /opt/3x-ui/cert/panel.key
+          -out /opt/3x-ui/cert/panel.crt
+          -subj "/CN={{ xui_panel_domain if xui_panel_domain | length > 0 else ansible_default_ipv4.address }}"
+      args:
+        creates: /opt/3x-ui/cert/panel.crt
+      when: xui_mode != 'basic' and not xui_use_letsencrypt
+      tags: [cert]
+
+    # ── Nginx site configuration ──────────────────────────────────────────────
+    - name: Deploy nginx panel site config
+      ansible.builtin.template:
+        src: "{{ playbook_dir | dirname }}/templates/nginx_panel.conf.j2"
+        dest: /etc/nginx/sites-available/panel.conf
+        mode: "0644"
+      when: xui_mode != 'basic'
+      notify: Reload nginx
+      tags: [nginx]
+
+    - name: Enable nginx panel site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/panel.conf
+        dest: /etc/nginx/sites-enabled/panel.conf
+        state: link
+      when: xui_mode != 'basic'
+      notify: Reload nginx
+      tags: [nginx]
+
+    - name: Deploy SNI stream router config
+      ansible.builtin.template:
+        src: "{{ playbook_dir | dirname }}/templates/nginx_sni_router.conf.j2"
+        dest: /etc/nginx/stream.d/sni-router.conf
+        mode: "0644"
+      when: xui_mode == 'nginx_sni'
+      notify: Restart nginx
+      tags: [nginx]
+
+    - name: Enable and start nginx
+      ansible.builtin.service:
+        name: nginx
+        enabled: true
+        state: started
+      when: xui_mode != 'basic'
+      tags: [nginx]

@@ -1,0 +1,43 @@
+---
+# ── Play 03: 3x-ui container ──────────────────────────────────────────────────
+# Creates /opt/3x-ui directory layout, renders compose.yml from a template and
+# starts (or updates) the container via docker compose.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "03 | 3x-ui: Deploy container"
+  hosts: all
+  remote_user: "{{ xui_run_user | default(omit) }}"
+  become: true
+  gather_facts: true
+  tags: [xui]
+
+  tasks:
+    - name: Create /opt/3x-ui directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /opt/3x-ui
+        - /opt/3x-ui/db
+        - /opt/3x-ui/logs
+        - /opt/3x-ui/cert
+
+    # For imported playbooks, playbook_dir points to this file's directory,
+    # so we step one level up to reach the project root templates/ folder.
+    - name: Render compose.yml
+      ansible.builtin.template:
+        src: "{{ playbook_dir | dirname }}/templates/compose.yml.j2"
+        dest: /opt/3x-ui/compose.yml
+        mode: "0644"
+      register: compose_file
+
+    - name: Start / update 3x-ui container
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: /opt/3x-ui
+      register: compose_up
+      changed_when: >-
+        compose_file.changed or
+        'Started' in (compose_up.stdout + compose_up.stderr) or
+        'Created' in (compose_up.stdout + compose_up.stderr)

@@ -1,0 +1,23 @@
+stream {
+    # Long SNI hostnames can exceed nginx's default 32-byte map hash bucket.
+    map_hash_bucket_size {{ xui_nginx_stream_map_hash_bucket_size }};
+
+    # Route incoming TLS connections by SNI without decrypting them.
+    map $ssl_preread_server_name $backend {
+        {{ xui_panel_domain }} panel_backend;  # -> nginx-http (terminates TLS for panel)
+{% if xui_vpn_domain | length > 0 %}
+        {{ xui_vpn_domain }}  xray_backend;    # -> Xray (Reality, TLS untouched)
+{% endif %}
+        default               cover_backend;   # -> real site (masquerade)
+    }
+
+    upstream panel_backend { server 127.0.0.1:{{ xui_nginx_http_backend_port }}; }
+    upstream xray_backend  { server 127.0.0.1:{{ xui_xray_backend_port }}; }
+    upstream cover_backend { server {{ xui_sni_cover_backend }}; }
+
+    server {
+        listen      0.0.0.0:443;
+        proxy_pass  $backend;
+        ssl_preread on;   # read SNI without terminating TLS
+    }
+}

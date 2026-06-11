@@ -1,0 +1,87 @@
+{% if xui_use_letsencrypt %}
+{% set cert_crt = '/etc/letsencrypt/live/' + xui_panel_domain + '/fullchain.pem' %}
+{% set cert_key = '/etc/letsencrypt/live/' + xui_panel_domain + '/privkey.pem' %}
+{% else %}
+{% set cert_crt = '/opt/3x-ui/cert/panel.crt' %}
+{% set cert_key = '/opt/3x-ui/cert/panel.key' %}
+{% endif %}
+# Rate limiting zone (http context, applied to panel location)
+limit_req_zone $binary_remote_addr zone=panel:10m rate=10r/s;
+
+# HTTP -> HTTPS redirect
+server {
+    listen 80;
+    server_name {{ xui_panel_domain }};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root {{ xui_acme_webroot }};
+        default_type "text/plain";
+        try_files $uri =404;
+    }
+
+    return 301 https://$host$request_uri;
+}
+
+{% if xui_use_letsencrypt and (xui_hysteria_enabled | bool) and (xui_hysteria_domain | length > 0) and (xui_hysteria_domain != xui_panel_domain) %}
+server {
+    listen 80;
+    server_name {{ xui_hysteria_domain }};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root {{ xui_acme_webroot }};
+        default_type "text/plain";
+        try_files $uri =404;
+    }
+
+    location / {
+        return 404;
+    }
+}
+{% endif %}
+
+# Panel HTTPS
+server {
+{% if xui_mode == 'nginx_sni' %}
+    # In SNI mode nginx-stream owns port 443; this block is local-only.
+    listen 127.0.0.1:{{ xui_nginx_http_backend_port }} ssl http2;
+{% else %}
+    listen 443 ssl http2;
+{% endif %}
+    server_name {{ xui_panel_domain }};
+
+    ssl_certificate     {{ cert_crt }};
+    ssl_certificate_key {{ cert_key }};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # Security headers
+    add_header X-Frame-Options        DENY        always;
+    add_header X-Content-Type-Options nosniff     always;
+    add_header Referrer-Policy        no-referrer always;
+
+{% if xui_panel_path != '/' %}
+    location {{ xui_panel_path }} {
+        limit_req zone=panel burst=20 nodelay;
+
+        proxy_pass         http://127.0.0.1:{{ xui_panel_port }};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+    }
+{% endif %}
+
+    # 3x-ui may redirect from a custom path (e.g. /panel/) back to '/'.
+    # Keep '/' proxied too, so the panel remains reachable after redirects.
+    location / {
+        limit_req zone=panel burst=20 nodelay;
+
+        proxy_pass         http://127.0.0.1:{{ xui_panel_port }};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+    }
+}

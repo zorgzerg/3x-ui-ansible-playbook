@@ -1,0 +1,91 @@
+---
+# ── Play 05: Firewall (UFW) ───────────────────────────────────────────────────
+# Sets default policies, opens the required ports and enables UFW.
+#
+# Ports by mode:
+#   basic        → SSH + xui_panel_port (2053) + xui_vless_port (443)
+#   nginx_simple → SSH + 80 + 443 + xui_xray_backend_port (8443 for Xray)
+#   nginx_sni    → SSH + 80 + 443  (everything behind nginx-stream on 443)
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "05 | Firewall: Configure UFW rules"
+  hosts: all
+  remote_user: "{{ xui_run_user | default(omit) }}"
+  become: true
+  gather_facts: true
+  tags: [firewall]
+
+  tasks:
+    - name: UFW default deny incoming
+      community.general.ufw:
+        direction: incoming
+        policy: deny
+
+    - name: UFW default allow outgoing
+      community.general.ufw:
+        direction: outgoing
+        policy: allow
+
+    # Anti-lockout: keep the current Ansible SSH port open until the new one is
+    # confirmed to work, but only when they differ.
+    - name: Allow current Ansible SSH port (anti-lockout)
+      community.general.ufw:
+        rule: allow
+        port: "{{ ansible_port | default(22) }}"
+        proto: tcp
+      when: (ansible_port | default(22) | int) != (xui_ssh_port | int)
+
+    - name: Allow configured SSH port
+      community.general.ufw:
+        rule: allow
+        port: "{{ xui_ssh_port }}"
+        proto: tcp
+
+    # basic mode: panel and Xray are exposed directly
+    - name: Allow 3x-ui panel port (basic mode)
+      community.general.ufw:
+        rule: allow
+        port: "{{ xui_panel_port }}"
+        proto: tcp
+      when: xui_mode == 'basic'
+
+    - name: Allow VLESS/Xray port (basic mode)
+      community.general.ufw:
+        rule: allow
+        port: "{{ xui_vless_port }}"
+        proto: tcp
+      when: xui_mode == 'basic'
+
+    # nginx modes: 443 goes through Nginx; 80 is for certbot and HTTP→HTTPS redirect
+    - name: Allow HTTP port (nginx modes)
+      community.general.ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+      when: xui_mode != 'basic'
+
+    - name: Allow HTTPS port (nginx modes)
+      community.general.ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+      when: xui_mode != 'basic'
+
+    # nginx_simple: Xray listens on a separate external port
+    - name: Allow Xray direct port (nginx_simple mode)
+      community.general.ufw:
+        rule: allow
+        port: "{{ xui_xray_backend_port }}"
+        proto: tcp
+      when: xui_mode == 'nginx_simple'
+
+    - name: Allow Hysteria2 UDP port (optional)
+      community.general.ufw:
+        rule: allow
+        port: "{{ xui_hysteria_port }}"
+        proto: udp
+      when: xui_hysteria_enabled | bool
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled

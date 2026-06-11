@@ -1,0 +1,84 @@
+---
+# ── Play 01: OS preparation and SSH hardening ─────────────────────────────────
+# Validates deployment parameters, updates packages and optionally hardens sshd.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "01 | Base: OS preparation and SSH hardening"
+  hosts: all
+  remote_user: "{{ xui_run_user | default(omit) }}"
+  become: true
+  gather_facts: true
+  tags: [base]
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
+
+  pre_tasks:
+    - name: Assert Ubuntu
+      ansible.builtin.assert:
+        that: ansible_distribution == "Ubuntu"
+        fail_msg: "Only Ubuntu is supported by this playbook."
+
+    - name: Assert nginx_simple requires xui_panel_domain
+      ansible.builtin.assert:
+        that: xui_panel_domain | length > 0
+        fail_msg: "xui_mode=nginx_simple requires xui_panel_domain to be set."
+      when: xui_mode == 'nginx_simple'
+
+    - name: Assert nginx_sni requires xui_panel_domain and xui_vpn_domain
+      ansible.builtin.assert:
+        that:
+          - xui_panel_domain | length > 0
+          - xui_vpn_domain | length > 0
+        fail_msg: "xui_mode=nginx_sni requires both xui_panel_domain and xui_vpn_domain."
+      when: xui_mode == 'nginx_sni'
+
+    - name: Assert Let's Encrypt requires certbot_email
+      ansible.builtin.assert:
+        that: xui_certbot_email | length > 0
+        fail_msg: "xui_use_letsencrypt=true requires xui_certbot_email."
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+
+    - name: Assert Hysteria LE domain is set when Hysteria is enabled
+      ansible.builtin.assert:
+        that: xui_hysteria_domain | length > 0
+        fail_msg: "xui_hysteria_enabled=true with xui_use_letsencrypt=true requires xui_hysteria_domain."
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - xui_hysteria_enabled | bool
+
+  tasks:
+    - name: Update apt cache and upgrade packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        autoremove: true
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg, ufw, mc]
+        state: present
+
+    # WARNING: enable xui_manage_ssh_hardening only after key-based SSH is confirmed.
+    - name: Harden sshd configuration
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?{{ item.key }}\\s"
+        line: "{{ item.key }} {{ item.value }}"
+        backup: true
+      loop:
+        - { key: PermitRootLogin,        value: "no" }
+        - { key: PasswordAuthentication, value: "{{ xui_disable_password_auth | ternary('no', 'yes') }}" }
+        - { key: PubkeyAuthentication,   value: "yes" }
+        - { key: Port,                   value: "{{ xui_ssh_port }}" }
+        - { key: ClientAliveInterval,    value: "60" }
+        - { key: ClientAliveCountMax,    value: "720" }
+      notify: Restart ssh
+      when: xui_manage_ssh_hardening
+      tags: [base, ssh]
