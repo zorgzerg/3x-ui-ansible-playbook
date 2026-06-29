@@ -26,6 +26,7 @@ xui_mode: nginx_sni
 # ── Ports ──────────────────────────────────────────────────────────────────────
 xui_ssh_port: 1337
 xui_panel_port: 2053           # panel internal port inside container (all modes)
+xui_sub_port: 2096             # subscription backend port inside container
 xui_vless_port: 443            # Xray external port (basic mode only)
 xui_xray_backend_port: 8443    # Xray local port  (nginx_simple / nginx_sni)
 xui_nginx_http_backend_port: 4443  # nginx-http local port for TLS termination (nginx_sni)

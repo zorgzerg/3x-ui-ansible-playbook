@@ -159,6 +159,7 @@ ansible-playbook -i inventory.ini playbook.yml --tags xui,firewall
 | `xui_admin_user` | `pilot` | пользователь, добавляемый в группу docker |
 | `xui_ssh_port` | `1337` | порт SSH |
 | `xui_panel_port` | `2053` | внутренний порт панели |
+| `xui_sub_port` | `2096` | локальный backend-порт подписок для nginx `/sub/` |
 | `xui_vless_port` | `443` | внешний порт Xray (только basic) |
 | `xui_xray_backend_port` | `8443` | локальный порт Xray (nginx режимы) |
 | `xui_hysteria_enabled` | `true` | включить проброс и UFW-правило для Hysteria2 UDP |

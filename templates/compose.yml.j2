@@ -19,6 +19,7 @@ services:
 {% elif xui_mode == 'nginx_simple' %}
     ports:
       - "127.0.0.1:{{ xui_panel_port }}:{{ xui_panel_port }}"
+      - "127.0.0.1:{{ xui_sub_port }}:{{ xui_sub_port }}"
       - "0.0.0.0:{{ xui_xray_backend_port }}:443"
 {% if xui_hysteria_enabled | bool %}
       - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
@@ -26,6 +27,7 @@ services:
 {% elif xui_mode == 'nginx_sni' %}
     ports:
       - "127.0.0.1:{{ xui_panel_port }}:{{ xui_panel_port }}"
+      - "127.0.0.1:{{ xui_sub_port }}:{{ xui_sub_port }}"
       - "127.0.0.1:{{ xui_xray_backend_port }}:443"
 {% if xui_hysteria_enabled | bool %}
       - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
