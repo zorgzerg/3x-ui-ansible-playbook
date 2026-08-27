@@ -1,6 +1,6 @@
 services:
   3xui:
-    image: {{ xui_image }}
+    image: "{{ xui_image_repository }}:{{ xui_version }}"
     container_name: xui
     restart: unless-stopped
     volumes:
@@ -24,6 +24,9 @@ services:
 {% if xui_hysteria_enabled | bool %}
       - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
 {% endif %}
+{% if xui_amneziawg_enabled | bool %}
+      - "0.0.0.0:{{ xui_amneziawg_port }}:{{ xui_amneziawg_port }}/udp"
+{% endif %}
 {% elif xui_mode == 'nginx_sni' %}
     ports:
       - "127.0.0.1:{{ xui_panel_port }}:{{ xui_panel_port }}"
@@ -31,5 +34,8 @@ services:
       - "127.0.0.1:{{ xui_xray_backend_port }}:443"
 {% if xui_hysteria_enabled | bool %}
       - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
+{% endif %}
+{% if xui_amneziawg_enabled | bool %}
+      - "0.0.0.0:{{ xui_amneziawg_port }}:{{ xui_amneziawg_port }}/udp"
 {% endif %}
 {% endif %}

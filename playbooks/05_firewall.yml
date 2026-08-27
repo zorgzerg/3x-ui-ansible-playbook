@@ -5,7 +5,8 @@
 # Ports by mode:
 #   basic        → SSH + xui_panel_port (2053) + xui_vless_port (443)
 #   nginx_simple → SSH + 80 + 443 + xui_xray_backend_port (8443 for Xray)
-#   nginx_sni    → SSH + 80 + 443  (everything behind nginx-stream on 443)
+#   nginx_sni    → SSH + 80 + 443  (TCP traffic behind nginx-stream on 443)
+#   optional UDP → Hysteria2 + AmneziaWG ports in all modes
 # ─────────────────────────────────────────────────────────────────────────────
 
 - name: "05 | Firewall: Configure UFW rules"
@@ -85,6 +86,13 @@
         port: "{{ xui_hysteria_port }}"
         proto: udp
       when: xui_hysteria_enabled | bool
+
+    - name: Allow AmneziaWG UDP port (optional)
+      community.general.ufw:
+        rule: allow
+        port: "{{ xui_amneziawg_port }}"
+        proto: udp
+      when: xui_amneziawg_enabled | bool
 
     - name: Enable UFW
       community.general.ufw:

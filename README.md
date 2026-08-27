@@ -1,6 +1,6 @@
 # Ansible: Deploy 3x-ui on Ubuntu
 
-Этот плейбук разворачивает на Ubuntu-хосте `3x-ui` и подготавливает его для работы `VLESS` и `Hysteria` прокси-протоколов.
+Этот плейбук разворачивает на Ubuntu-хосте `3x-ui` и подготавливает его для работы `VLESS`, `Hysteria2` и `AmneziaWG` прокси-протоколов.
 
 ## Файлы
 
@@ -151,12 +151,30 @@ ansible-playbook -i inventory.ini playbook.yml --tags xui,firewall
     - профиль VLESS+Reality
     - профиль Hysteria2
 
+## AmneziaWG
+
+Для созданного в 3x-ui inbound плейбук пробрасывает UDP-порт контейнера и
+открывает его в UFW:
+
+```yaml
+xui_amneziawg_enabled: true
+xui_amneziawg_port: 25204
+```
+
+Применить конфигурацию контейнера и firewall:
+
+```bash
+ansible-playbook -i inventory.ini playbook.yml --tags xui,firewall
+```
+
 ## Ключевые переменные
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
 | `xui_mode` | `basic` | режим: `basic`, `nginx_simple`, `nginx_sni` |
 | `xui_admin_user` | `pilot` | пользователь, добавляемый в группу docker |
+| `xui_image_repository` | `ghcr.io/mhsanaei/3x-ui` | репозиторий Docker-образа 3x-ui |
+| `xui_version` | `v3.7.0` | фиксированная версия 3x-ui |
 | `xui_ssh_port` | `1337` | порт SSH |
 | `xui_panel_port` | `2053` | внутренний порт панели |
 | `xui_sub_port` | `2096` | локальный backend-порт подписок для nginx `/sub/` |
@@ -164,6 +182,8 @@ ansible-playbook -i inventory.ini playbook.yml --tags xui,firewall
 | `xui_xray_backend_port` | `8443` | локальный порт Xray (nginx режимы) |
 | `xui_hysteria_enabled` | `true` | включить проброс и UFW-правило для Hysteria2 UDP |
 | `xui_hysteria_port` | `8443` | внешний и контейнерный UDP-порт Hysteria2 |
+| `xui_amneziawg_enabled` | `true` | включить проброс и UFW-правило для AmneziaWG UDP |
+| `xui_amneziawg_port` | `25204` | внешний и контейнерный UDP-порт AmneziaWG |
 | `xui_panel_domain` | `""` | домен панели (nginx режимы) |
 | `xui_vpn_domain` | `""` | домен VPN (только nginx_sni) |
 | `xui_nginx_stream_map_hash_bucket_size` | `128` | размер hash bucket для `stream map` SNI-доменов |

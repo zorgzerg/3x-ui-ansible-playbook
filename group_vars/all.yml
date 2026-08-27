@@ -37,7 +37,8 @@ xui_manage_ssh_hardening: false
 xui_disable_password_auth: true
 
 # ── Container ──────────────────────────────────────────────────────────────────
-xui_image: ghcr.io/mhsanaei/3x-ui:latest
+xui_image_repository: ghcr.io/mhsanaei/3x-ui
+xui_version: "v3.7.0"
 xui_enable_fail2ban: true
 
 # ── Domain and TLS (nginx modes only) ─────────────────────────────────────────
@@ -62,4 +63,8 @@ xui_nginx_stream_map_hash_bucket_size: 128
 xui_hysteria_enabled: true
 xui_hysteria_port: 443
 xui_hysteria_domain: ""    # set per host in inventory.ini (gitignored)
+
+# ── Optional AmneziaWG ───────────────────────────────────────────────────────
+xui_amneziawg_enabled: true
+xui_amneziawg_port: 25204
 
