@@ -19,7 +19,9 @@ server {
         try_files $uri =404;
     }
 
-    return 301 https://$host$request_uri;
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 {% if xui_use_letsencrypt and (xui_hysteria_enabled | bool) and (xui_hysteria_domain | length > 0) and (xui_hysteria_domain != xui_panel_domain) %}

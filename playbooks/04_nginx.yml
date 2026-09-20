@@ -4,7 +4,7 @@
 # deploys site configs. Skipped entirely in basic mode.
 #
 # Certificate strategies:
-#   xui_use_letsencrypt: true  → certbot --standalone (nginx stopped temporarily)
+#   xui_use_letsencrypt: true  → certbot --webroot (nginx remains available)
 #   xui_use_letsencrypt: false → self-signed via openssl (idempotent, creates once)
 #
 # Nginx modes:
@@ -75,6 +75,16 @@
       ansible.builtin.apt:
         name: [certbot]
         state: present
+      when: xui_mode != 'basic' and xui_use_letsencrypt
+      tags: [cert]
+
+    - name: Install nginx reload hook for renewed certificates
+      ansible.builtin.copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          nginx -t && systemctl reload nginx
       when: xui_mode != 'basic' and xui_use_letsencrypt
       tags: [cert]
 
@@ -163,31 +173,114 @@
         - xui_hysteria_domain | length > 0
       tags: [cert]
 
-    - name: Issue panel Let's Encrypt certificate (webroot)
+    - name: Read panel certificate SANs
+      ansible.builtin.command:
+        cmd: >-
+          openssl x509 -in /etc/letsencrypt/live/{{ xui_panel_domain }}/fullchain.pem
+          -noout -ext subjectAltName
+      register: le_panel_cert_sans
+      changed_when: false
+      when:
+        - le_panel_cert_stat.stat.exists | default(false)
+      tags: [cert]
+
+    - name: Read Hysteria certificate SANs
+      ansible.builtin.command:
+        cmd: >-
+          openssl x509 -in /etc/letsencrypt/live/{{ xui_hysteria_domain }}/fullchain.pem
+          -noout -ext subjectAltName
+      register: le_hysteria_cert_sans
+      changed_when: false
+      when:
+        - le_hysteria_cert_stat.stat.exists | default(false)
+      tags: [cert]
+
+    - name: Ensure panel certificate has expected SANs
       ansible.builtin.command:
         cmd: >-
           certbot certonly --webroot -w {{ xui_acme_webroot }}
           --non-interactive --agree-tos --email {{ xui_certbot_email }}
+          --cert-name {{ xui_panel_domain }} --force-renewal
           -d {{ xui_panel_domain }}
       when:
         - xui_mode != 'basic'
         - xui_use_letsencrypt
         - xui_panel_domain | length > 0
-        - not (le_panel_cert_stat.stat.exists | default(false))
+        - >-
+          not (le_panel_cert_stat.stat.exists | default(false)) or
+          (le_panel_cert_sans.stdout | default('') |
+          regex_findall('DNS:([^,\s]+)') | sort) != [xui_panel_domain]
+      notify: Reload nginx
       tags: [cert]
 
-    - name: Issue Hysteria Let's Encrypt certificate (webroot)
+    - name: Ensure Hysteria certificate has expected SANs
       ansible.builtin.command:
         cmd: >-
           certbot certonly --webroot -w {{ xui_acme_webroot }}
           --non-interactive --agree-tos --email {{ xui_certbot_email }}
+          --cert-name {{ xui_hysteria_domain }} --force-renewal
           -d {{ xui_hysteria_domain }}
       when:
         - xui_mode != 'basic'
         - xui_use_letsencrypt
         - xui_hysteria_enabled | bool
         - xui_hysteria_domain | length > 0
-        - not (le_hysteria_cert_stat.stat.exists | default(false))
+        - >-
+          not (le_hysteria_cert_stat.stat.exists | default(false)) or
+          (le_hysteria_cert_sans.stdout | default('') |
+          regex_findall('DNS:([^,\s]+)') | sort) != [xui_hysteria_domain]
+      notify: Reload nginx
+      tags: [cert]
+
+    - name: Check panel certificate renewal authenticator
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -Fxq
+          - authenticator = webroot
+          - "/etc/letsencrypt/renewal/{{ xui_panel_domain }}.conf"
+      register: le_panel_webroot_check
+      changed_when: false
+      failed_when: le_panel_webroot_check.rc not in [0, 1]
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - le_panel_cert_stat.stat.exists | default(false)
+      tags: [cert]
+
+    - name: Reconfigure panel certificate renewal to use webroot
+      ansible.builtin.command:
+        cmd: >-
+          certbot reconfigure --cert-name {{ xui_panel_domain }}
+          --webroot --webroot-path {{ xui_acme_webroot }} --non-interactive
+      when:
+        - le_panel_webroot_check.rc | default(0) == 1
+      tags: [cert]
+
+    - name: Check Hysteria certificate renewal authenticator
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -Fxq
+          - authenticator = webroot
+          - "/etc/letsencrypt/renewal/{{ xui_hysteria_domain }}.conf"
+      register: le_hysteria_webroot_check
+      changed_when: false
+      failed_when: le_hysteria_webroot_check.rc not in [0, 1]
+      when:
+        - xui_mode != 'basic'
+        - xui_use_letsencrypt
+        - xui_hysteria_enabled | bool
+        - le_hysteria_cert_stat.stat.exists | default(false)
+      tags: [cert]
+
+    - name: Reconfigure Hysteria certificate renewal to use webroot
+      ansible.builtin.command:
+        cmd: >-
+          certbot reconfigure --cert-name {{ xui_hysteria_domain }}
+          --webroot --webroot-path {{ xui_acme_webroot }} --non-interactive
+      when:
+        - le_hysteria_webroot_check.rc | default(0) == 1
       tags: [cert]
 
     - name: Disable temporary ACME HTTP config

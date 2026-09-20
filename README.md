@@ -102,6 +102,7 @@ xui_certbot_email: you@example.com
 - Nginx не останавливается для HTTP-01 challenge.
 - Challenge-файлы обслуживаются из `xui_acme_webroot`.
 - Можно выпускать отдельный сертификат для домена Hysteria2 (`xui_hysteria_domain`).
+- Состав SAN сверяется с inventory; сертификат перевыпускается при отсутствующих или лишних доменах.
 
 ## Hysteria2 + VLESS TCP Reality
 
