@@ -13,11 +13,29 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 - name: "04 | Nginx + TLS: Install, configure and issue certificates"
-  hosts: all
+  hosts: "{{ xui_target_group | default('all') }}"
   remote_user: "{{ xui_run_user | default(omit) }}"
   become: true
   gather_facts: true
   tags: [nginx, cert]
+
+  pre_tasks:
+    - name: Refuse changes to a protected server
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (xui_protected | default(false) | bool) or
+            (xui_allow_protected_changes | default(false) | bool)
+        fail_msg: >-
+          {{ inventory_hostname }} is protected. Target the relay playbook, or
+          explicitly pass -e xui_allow_protected_changes=true if a change to
+          this server is intentional.
+      tags: [always]
+
+    - name: Validate SNI routes
+      ansible.builtin.import_tasks: tasks/validate_sni.yml
+      when: xui_mode == 'nginx_sni'
+      tags: [always]
 
   handlers:
     - name: Reload nginx
@@ -75,6 +93,16 @@
       ansible.builtin.apt:
         name: [certbot]
         state: present
+      when: xui_mode != 'basic' and xui_use_letsencrypt
+      tags: [cert]
+
+    - name: Ensure Certbot deploy hook directory exists
+      ansible.builtin.file:
+        path: /etc/letsencrypt/renewal-hooks/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
       when: xui_mode != 'basic' and xui_use_letsencrypt
       tags: [cert]
 

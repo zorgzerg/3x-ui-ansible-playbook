@@ -4,7 +4,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 - name: "01 | Base: OS preparation and SSH hardening"
-  hosts: all
+  hosts: "{{ xui_target_group | default('all') }}"
   remote_user: "{{ xui_run_user | default(omit) }}"
   become: true
   gather_facts: true
@@ -17,6 +17,29 @@
         state: restarted
 
   pre_tasks:
+    - name: Refuse changes to a protected server
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (xui_protected | default(false) | bool) or
+            (xui_allow_protected_changes | default(false) | bool)
+        fail_msg: >-
+          {{ inventory_hostname }} is protected. Target the relay playbook, or
+          explicitly pass -e xui_allow_protected_changes=true if a change to
+          this server is intentional.
+      tags: [always]
+
+    - name: Validate SNI routes
+      ansible.builtin.import_tasks: tasks/validate_sni.yml
+      when: xui_mode == 'nginx_sni'
+      tags: [always]
+
+    - name: Assert supported server role
+      ansible.builtin.assert:
+        that: (xui_server_role | default('standalone')) in ['standalone', 'relay', 'foreign']
+        fail_msg: "xui_server_role must be standalone, relay or foreign."
+      tags: [always]
+
     - name: Assert Ubuntu
       ansible.builtin.assert:
         that: ansible_distribution == "Ubuntu"
@@ -27,14 +50,6 @@
         that: xui_panel_domain | length > 0
         fail_msg: "xui_mode=nginx_simple requires xui_panel_domain to be set."
       when: xui_mode == 'nginx_simple'
-
-    - name: Assert nginx_sni requires xui_panel_domain and xui_vpn_domain
-      ansible.builtin.assert:
-        that:
-          - xui_panel_domain | length > 0
-          - xui_vpn_domain | length > 0
-        fail_msg: "xui_mode=nginx_sni requires both xui_panel_domain and xui_vpn_domain."
-      when: xui_mode == 'nginx_sni'
 
     - name: Assert Let's Encrypt requires certbot_email
       ansible.builtin.assert:

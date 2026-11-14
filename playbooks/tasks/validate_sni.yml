@@ -1,0 +1,40 @@
+---
+- name: Validate SNI route list
+  ansible.builtin.assert:
+    that:
+      - xui_vless_inbounds is sequence
+      - xui_vless_inbounds is not string
+      - xui_vless_inbounds is not mapping
+      - xui_panel_domain is match('^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?[.])*[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')
+    fail_msg: "Set a valid panel hostname and a list of VLESS SNI routes."
+
+- name: Validate each SNI route
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.sni is defined
+      - item.host_port is defined
+      - item.container_port is defined
+      - item.sni is string
+      - item.sni is match('^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?[.])*[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')
+      - (item.sni | lower) != (xui_panel_domain | lower)
+      - (item.sni | lower) != 'default'
+      - (xui_panel_domain | lower) != 'default'
+      - (item.host_port | string) is match('^[0-9]+$')
+      - (item.container_port | string) is match('^[0-9]+$')
+      - item.host_port | int >= 1 and item.host_port | int <= 65535
+      - item.container_port | int >= 1 and item.container_port | int <= 65535
+      - item.host_port | int not in [80, 443, xui_ssh_port | int, ansible_port | default(22) | int, xui_panel_port | int, xui_sub_port | int, xui_nginx_http_backend_port | int]
+      - item.container_port | int not in [xui_panel_port | int, xui_sub_port | int]
+    fail_msg: "Each SNI route must have a distinct valid hostname and available host and container TCP ports."
+  loop: "{{ xui_effective_vless_inbounds }}"
+  loop_control:
+    label: "{{ item.sni | default('invalid route') }}"
+
+- name: Ensure SNI names and TCP ports are unique
+  ansible.builtin.assert:
+    that:
+      - (xui_effective_vless_inbounds | map(attribute='sni') | map('lower') | unique | list | length) == (xui_effective_vless_inbounds | length)
+      - (xui_effective_vless_inbounds | map(attribute='host_port') | map('int') | unique | list | length) == (xui_effective_vless_inbounds | length)
+      - (xui_effective_vless_inbounds | map(attribute='container_port') | map('int') | unique | list | length) == (xui_effective_vless_inbounds | length)
+    fail_msg: "SNI names, host ports and container ports must each be unique."

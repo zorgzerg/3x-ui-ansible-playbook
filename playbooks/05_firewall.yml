@@ -10,11 +10,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 - name: "05 | Firewall: Configure UFW rules"
-  hosts: all
+  hosts: "{{ xui_target_group | default('all') }}"
   remote_user: "{{ xui_run_user | default(omit) }}"
   become: true
   gather_facts: true
   tags: [firewall]
+
+  pre_tasks:
+    - name: Refuse changes to a protected server
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (xui_protected | default(false) | bool) or
+            (xui_allow_protected_changes | default(false) | bool)
+        fail_msg: >-
+          {{ inventory_hostname }} is protected. Target the relay playbook, or
+          explicitly pass -e xui_allow_protected_changes=true if a change to
+          this server is intentional.
+      tags: [always]
 
   tasks:
     - name: UFW default deny incoming
@@ -93,6 +106,20 @@
         port: "{{ xui_amneziawg_port }}"
         proto: udp
       when: xui_amneziawg_enabled | bool
+
+    - name: Allow additional TCP ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ xui_firewall_extra_tcp_ports | default([]) }}"
+
+    - name: Allow additional UDP ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: udp
+      loop: "{{ xui_firewall_extra_udp_ports | default([]) }}"
 
     - name: Enable UFW
       community.general.ufw:

@@ -5,10 +5,23 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 - name: "00 | Bootstrap admin user from root (optional)"
-  hosts: all
+  hosts: "{{ xui_target_group | default('all') }}"
   become: true
   gather_facts: false
   tags: [bootstrap]
+
+  pre_tasks:
+    - name: Refuse changes to a protected server
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (xui_protected | default(false) | bool) or
+            (xui_allow_protected_changes | default(false) | bool)
+        fail_msg: >-
+          {{ inventory_hostname }} is protected. Target the relay playbook, or
+          explicitly pass -e xui_allow_protected_changes=true if a change to
+          this server is intentional.
+      tags: [always]
 
   tasks:
     - name: Check if running via root connection

@@ -1,0 +1,9 @@
+---
+xui_server_role: relay
+
+# The relay accepts clients over embedded AmneziaWG. Its chained outbound and
+# inboundTag routing rule are intentionally configured in 3x-ui separately;
+# this playbook never edits the foreign server's production database.
+xui_amneziawg_enabled: true
+xui_hysteria_enabled: true
+xui_hysteria_domain: ""

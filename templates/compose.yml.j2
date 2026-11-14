@@ -13,6 +13,11 @@ services:
 {% endif %}
     environment:
       XUI_ENABLE_FAIL2BAN: "{{ xui_enable_fail2ban | ternary('true', 'false') }}"
+{% if xui_enable_fail2ban | bool %}
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+{% endif %}
     tty: true
 {% if xui_mode == 'basic' %}
     network_mode: host
@@ -31,7 +36,9 @@ services:
     ports:
       - "127.0.0.1:{{ xui_panel_port }}:{{ xui_panel_port }}"
       - "127.0.0.1:{{ xui_sub_port }}:{{ xui_sub_port }}"
-      - "127.0.0.1:{{ xui_xray_backend_port }}:443"
+{% for inbound in xui_effective_vless_inbounds %}
+      - "127.0.0.1:{{ inbound.host_port }}:{{ inbound.container_port }}"
+{% endfor %}
 {% if xui_hysteria_enabled | bool %}
       - "0.0.0.0:{{ xui_hysteria_port }}:{{ xui_hysteria_port }}/udp"
 {% endif %}

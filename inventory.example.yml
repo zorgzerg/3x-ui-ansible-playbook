@@ -1,0 +1,31 @@
+---
+all:
+  children:
+    xui_servers:
+      children:
+        xui_foreign:
+          hosts:
+            foreign.example.com:
+              ansible_host: 203.0.113.10
+              ansible_user: root
+              ansible_port: 22
+              xui_panel_domain: panel-foreign.example.com
+              xui_hysteria_domain: hyst-foreign.example.com
+              xui_vpn_domain: www.example.com
+              xui_protected: true
+        xui_relay:
+          hosts:
+            relay.example.com:
+              ansible_host: 198.51.100.20
+              ansible_user: root
+              ansible_port: 22
+              xui_panel_domain: panel-relay.example.com
+              xui_hysteria_domain: hyst-relay.example.com
+              xui_vless_inbounds:
+                - sni: www.example.com
+                  host_port: 8443
+                  container_port: 443
+                - sni: www.example.org
+                  host_port: 8444
+                  container_port: 444
+              xui_firewall_extra_tcp_ports: []

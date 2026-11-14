@@ -2,14 +2,14 @@
 # Main entry point.
 #
 # Full run:
-#   ansible-playbook -i inventory.ini playbook.yml
+#   ansible-playbook -i inventory.yml playbook.yml
 #
 # Targeted layers (--tags):
-#   ansible-playbook -i inventory.ini playbook.yml --tags base
-#   ansible-playbook -i inventory.ini playbook.yml --tags docker
-#   ansible-playbook -i inventory.ini playbook.yml --tags xui
-#   ansible-playbook -i inventory.ini playbook.yml --tags nginx,cert
-#   ansible-playbook -i inventory.ini playbook.yml --tags firewall
+#   ansible-playbook -i inventory.yml playbook.yml --tags base
+#   ansible-playbook -i inventory.yml playbook.yml --tags docker
+#   ansible-playbook -i inventory.yml playbook.yml --tags xui
+#   ansible-playbook -i inventory.yml playbook.yml --tags nginx,cert
+#   ansible-playbook -i inventory.yml playbook.yml --tags firewall
 
 - import_playbook: playbooks/00_bootstrap.yml
 - import_playbook: playbooks/01_base.yml

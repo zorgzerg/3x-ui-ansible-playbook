@@ -1,0 +1,7 @@
+---
+# Entry point for foreign exit hosts. Existing production servers should have
+# xui_protected=true and will refuse all changes by default.
+
+- import_playbook: playbook.yml
+  vars:
+    xui_target_group: xui_foreign

@@ -1,0 +1,7 @@
+---
+# Safe entry point for the relay. Only hosts in xui_relay are targeted;
+# a protected foreign host is not part of the play at all.
+
+- import_playbook: playbook.yml
+  vars:
+    xui_target_group: xui_relay
