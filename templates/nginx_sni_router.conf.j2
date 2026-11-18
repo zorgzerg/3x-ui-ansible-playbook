@@ -7,6 +7,10 @@ stream {
         {{ xui_panel_domain }} panel_backend;  # -> nginx-http (terminates TLS for panel)
 {% for inbound in xui_effective_vless_inbounds %}
         {{ inbound.sni }} xray_backend_{{ loop.index }};
+{% set backend_index = loop.index %}
+{% for alias in inbound.aliases | default([]) %}
+        {{ alias }} xray_backend_{{ backend_index }};
+{% endfor %}
 {% endfor %}
         default               cover_backend;   # -> real site (masquerade)
     }

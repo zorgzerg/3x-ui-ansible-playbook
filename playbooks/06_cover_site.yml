@@ -1,0 +1,90 @@
+---
+# Standalone cover site for the foreign server; certificate must already exist.
+- name: Configure the foreign cover site
+  hosts: xui_foreign
+  become: true
+  pre_tasks:
+    - name: Refuse changes to a protected server unless explicitly allowed
+      ansible.builtin.assert:
+        that:
+          - not (xui_protected | default(false) | bool) or (xui_allow_protected_changes | default(false) | bool)
+  tasks:
+    - name: Allow the container network to reach the cover site
+      community.general.ufw:
+        rule: allow
+        from_ip: 172.18.0.0/16
+        to_ip: 172.18.0.1
+        port: '9444'
+        proto: tcp
+    - name: Allow longer server names
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/ddcr-server-names.conf
+        content: "server_names_hash_bucket_size 64;\n"
+        mode: '0644'
+      notify: Reload nginx
+    - name: Define API responses
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/ddcr-api-responses.conf
+        mode: '0644'
+        content: |
+          map_hash_bucket_size 128;
+          map "$request_method:$http_origin:$uri" $ddcr_api_response {
+              default '{"error":"authentication_required","message":"Authentication is required."}';
+              "POST:https://ddcr.zonu.org:/login" '{"error":"invalid_credentials","message":"Неверный логин или пароль. Попробуйте ещё раз."}';
+          }
+      notify: Reload nginx
+    - name: Create site directory
+      ansible.builtin.file:
+        path: /var/www/ddcr
+        state: directory
+        mode: '0755'
+    - name: Install site
+      ansible.builtin.copy:
+        src: ../templates/cover-site.html
+        dest: /var/www/ddcr/index.html
+        mode: '0644'
+    - name: Install local TLS site
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-enabled/ddcr-cover.conf
+        mode: '0644'
+        content: |
+          server {
+              listen 172.18.0.1:9444 ssl http2;
+              server_name ddcr.zonu.org;
+              ssl_certificate /etc/letsencrypt/live/ddcr.zonu.org/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/ddcr.zonu.org/privkey.pem;
+              ssl_protocols TLSv1.2 TLSv1.3;
+              root /var/www/ddcr;
+              index index.html;
+              location = / {
+                  try_files /index.html =404;
+              }
+              location / {
+                  return 302 https://ddcr.zonu.org/;
+              }
+          }
+          server {
+              listen 172.18.0.1:9444 ssl http2;
+              server_name api.ddcr.zonu.org;
+              ssl_certificate /etc/letsencrypt/live/api.ddcr.zonu.org/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/api.ddcr.zonu.org/privkey.pem;
+              ssl_protocols TLSv1.2 TLSv1.3;
+              default_type application/json;
+              add_header WWW-Authenticate 'Bearer realm="DDCR API"' always;
+              add_header Cache-Control "no-store" always;
+              add_header Access-Control-Allow-Origin 'https://ddcr.zonu.org' always;
+              add_header Access-Control-Allow-Methods 'GET, POST, OPTIONS' always;
+              add_header Access-Control-Allow-Headers 'Content-Type' always;
+              if ($request_method = OPTIONS) { return 204; }
+              return 401 $ddcr_api_response;
+          }
+      notify: Reload nginx
+  handlers:
+    - name: Check nginx configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      listen: Reload nginx
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

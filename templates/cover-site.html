@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f3">
+  <title>Добро пожаловать — DDCR</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f5f6f3;color:#172b29;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}header{height:76px;display:flex;align-items:center;justify-content:space-between;padding:0 6%;border-bottom:1px solid #e0e6e1;background:#fff}.brand{display:flex;align-items:center;gap:10px;font-weight:750;letter-spacing:.08em;font-size:17px}.mark{display:grid;place-items:center;background:#17483e;color:#fff;width:32px;height:32px;border-radius:9px;font-size:16px}.head-label{color:#71817a;font-size:13px}main{max-width:1160px;margin:0 auto;min-height:calc(100vh - 145px);display:grid;grid-template-columns:1fr 440px;align-items:center;gap:9%;padding:65px 28px}.intro{max-width:510px}.eyebrow{display:inline-flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.13em;font-weight:700;font-size:11px;color:#397c68}.dot{width:7px;height:7px;border-radius:50%;background:#6ba985}.intro h1{font-size:clamp(38px,5vw,59px);line-height:1.1;letter-spacing:-.045em;margin:20px 0;color:#19382f}.intro p{font-size:17px;line-height:1.7;color:#718078;max-width:430px}.card{background:#fff;border:1px solid #e4e9e3;border-radius:16px;box-shadow:0 14px 50px #213d2c0d;padding:38px}.card h2{font-size:24px;letter-spacing:-.03em;margin:0 0 6px}.subtitle{margin:0 0 28px;color:#7a8881;font-size:14px}label{display:block;font-weight:650;font-size:13px;margin:18px 0 7px}input{width:100%;height:48px;border:1px solid #d5dfd7;border-radius:8px;padding:0 13px;font:inherit;color:#172b29;background:#fff}input:focus{outline:2px solid #9ac5af;outline-offset:1px;border-color:#4d8870}button{width:100%;height:48px;margin-top:25px;border:0;border-radius:8px;background:#215e4b;color:#fff;font:600 14px inherit;font-family:inherit;font-size:14px;cursor:pointer}button:hover{background:#174b3b}.error{color:#a43d36;background:#fff4f2;border:1px solid #f1d3ce;border-radius:8px;padding:11px 12px;margin:20px 0 0;font-size:13px}.hint{border-top:1px solid #edf0ed;margin:27px 0 0;padding-top:20px;color:#89968e;font-size:12px;line-height:1.6}footer{display:flex;justify-content:space-between;gap:16px;max-width:1160px;margin:auto;padding:20px 28px;color:#95a199;font-size:12px}@media(max-width:760px){header{height:66px}.head-label{display:none}main{grid-template-columns:1fr;gap:25px;padding:48px 20px;min-height:auto}.intro h1{font-size:38px}.intro p{font-size:15px}.card{padding:28px}footer{padding:20px;flex-wrap:wrap}}
+    body{background:radial-gradient(ellipse at 12% 32%,#d3eadf 0,transparent 40%),radial-gradient(ellipse at 83% 65%,#e5dcf7 0,transparent 39%),#f4f5f4}
+    header{background:rgba(255,255,255,.72);backdrop-filter:blur(12px)}
+    .mark{background:linear-gradient(145deg,#236e59,#674f88);box-shadow:0 5px 15px #335b4c30}
+    .intro h1{color:#183c37}.intro p{color:#526a65}.eyebrow{color:#6a5593}.dot{background:#9a73bc;box-shadow:0 0 0 4px #a87bc527}
+    .card{background:rgba(255,255,255,.94);border-color:#e8e6ed;box-shadow:0 24px 65px #46416118}
+    button{background:linear-gradient(110deg,#236f5a,#5b548d);transition:filter .2s}button:hover{background:linear-gradient(110deg,#236f5a,#5b548d);filter:brightness(.9)}button:disabled{opacity:.65;cursor:wait}
+  </style>
+</head>
+<body>
+  <header><div class="brand"><span class="mark" aria-hidden="true">D</span> DDCR</div><span class="head-label">Точка входа</span></header>
+  <main>
+    <section class="intro"><div class="eyebrow"><span class="dot"></span> Место для своих</div><h1>Некоторые двери находят сами.</h1><p>Если вы здесь оказались, то наверняка не случайно. Добро пожаловать.</p></section>
+    <section class="card" aria-labelledby="sign-in-heading">
+      <h2 id="sign-in-heading">Рады вас видеть</h2><p class="subtitle">Введите данные, чтобы продолжить.</p>
+      <form id="login-form" action="https://api.ddcr.zonu.org/login" method="post">
+        <label for="username">Логин</label><input id="username" name="username" autocomplete="username" placeholder="Ваш логин">
+        <label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Ваш пароль">
+        <p id="error" class="error" role="alert" hidden>Неверный логин или пароль. Попробуйте ещё раз.</p>
+        <button type="submit">Войти</button>
+      </form>
+      <p class="hint">Не всё начинается с ответа. Иногда достаточно знать, куда идти.</p>
+    </section>
+  </main>
+  <footer><span>© DDCR</span><span>Для тех, кто нашёл</span></footer>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async function(event) {
+      event.preventDefault();
+      const error = document.getElementById('error');
+      const button = this.querySelector('button');
+      error.hidden = true;
+      button.disabled = true;
+      try {
+        const response = await fetch('https://api.ddcr.zonu.org/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({username: document.getElementById('username').value, password: document.getElementById('password').value})
+        });
+        const result = await response.json();
+        error.textContent = response.status === 401 && result.error === 'invalid_credentials' ? result.message : 'Не удалось войти. Попробуйте позже.';
+      } catch (e) {
+        error.textContent = 'Не удалось связаться с сервером. Попробуйте позже.';
+      } finally {
+        error.hidden = false;
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
